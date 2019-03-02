@@ -275,6 +275,7 @@ int _tmain(int argc, TCHAR *argv[])
 		} while(!new_port.compare("yes"));	
 
 	//DeleteFile(hSerial);
+	std::cout << "\nPress any key to exit." << std::endl;
 	std::cin.ignore();
 	// exit normally
 	return 0;

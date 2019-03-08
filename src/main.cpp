@@ -7,7 +7,7 @@ int _tmain(int argc, TCHAR *argv[])
 	HANDLE hSerial;
 	DCB dcbSerialParams = { 0, };
 	COMMTIMEOUTS timeouts = { 0, };
-	OVERLAPPED o;	
+	//OVERLAPPED o;	
 	bool port_dissapeared = false, port_noexist = false;
 	std::string new_port;
 
@@ -34,14 +34,14 @@ int _tmain(int argc, TCHAR *argv[])
 			}
 		if (!port_dissapeared)
 			std::wcout << "CreateFile exited OK!" << std::endl;
-
+/*
 		// Set the event mask. 
 		if(!port_dissapeared && !SetCommMask(hSerial, EV_CTS | EV_DSR))
 			{
 			std::wcerr << "\aSetCommMask failed with error " << GetLastError() << std::endl;
 			port_dissapeared = true;
 			}
-
+*//*
 		// Create an event object for use by WaitCommEvent. 
 		o.hEvent = CreateEvent(
 			NULL,   // default security attributes 
@@ -56,7 +56,7 @@ int _tmain(int argc, TCHAR *argv[])
 		o.Offset = 0;
 		o.OffsetHigh = 0;
 		assert(o.hEvent);
-
+*/
 		//  Initialize the DCB structure.
 		SecureZeroMemory(&dcbSerialParams, sizeof(DCB));
 		dcbSerialParams.DCBlength = sizeof(DCB);
@@ -111,10 +111,10 @@ int _tmain(int argc, TCHAR *argv[])
 				}
 			}
 		// Set COM port timeout settings
-		timeouts.ReadIntervalTimeout = 31; //50
-		timeouts.ReadTotalTimeoutConstant = 31; //50
+		timeouts.ReadIntervalTimeout = 50; //50
+		timeouts.ReadTotalTimeoutConstant = 50; //50
 		timeouts.ReadTotalTimeoutMultiplier = 10; //10
-		timeouts.WriteTotalTimeoutConstant = 31; //50
+		timeouts.WriteTotalTimeoutConstant = 50; //50
 		timeouts.WriteTotalTimeoutMultiplier = 10; //10
 
 		if(!port_dissapeared)
@@ -134,7 +134,7 @@ int _tmain(int argc, TCHAR *argv[])
 			std::string send_again;
 			do
 				{
-				DWORD bytes_written = 0, total_bytes_written = 0, bytes_read = 0;
+				DWORD bytes_written = 0, total_bytes_written = 0, bytes_read = 0, total_bytes_read = 0;
 				std::string from_file, bytes_to_send_str;
 
 				if(send_again.compare("yes") && !change_params.compare("yes"))
@@ -161,17 +161,22 @@ int _tmain(int argc, TCHAR *argv[])
 					std::getline(std::cin, bytes_to_send_str);
 					}
 
-				size_t repeat_counter = 0, repetitions = 1;
-				bool bad_string = false;
+				size_t repeat_counter = 0, repetitions = 1, cycle_counter = 0;
+				bool bad_string = false, infinite_loop = false, end_inf_cycle = false;
 				do
 					{
 					bad_string = false;
-					std::wcout << std::endl << "How many times to send?" << std::endl;
+					std::wcout << std::endl << "How many times to send? (type \"inf\" for infinite loop)" << std::endl;
 					std::string repetitions_str;	std::cin >> repetitions_str;
-					try
-						{	repetitions = std::stoi(repetitions_str);	}
-					catch(...)
-						{	bad_string = true;	}
+					if (!repetitions_str.compare("inf"))
+						infinite_loop = true;
+					else
+						{
+						try
+							{	repetitions = std::stoi(repetitions_str);	}
+						catch (...)
+							{	bad_string = true;	}
+						}
 					} while(bad_string);
 
 #ifdef LOG_RECEIVED_MESSAGE
@@ -186,62 +191,157 @@ int _tmain(int argc, TCHAR *argv[])
 
 				const char *bytes_to_send = bytes_to_send_str.c_str();
 				size_t char_count = bytes_to_send_str.length();
-				while(repeat_counter < repetitions)
+				char *bytes_to_read = nullptr;
+				try
+					{	bytes_to_read = new char[char_count + 1];	}
+				catch (const std::bad_alloc&)
+					{	throw ENoMemory;	}
+
+				if (infinite_loop)
 					{
-					char *bytes_to_read = nullptr;
-					try
-						{	bytes_to_read = new char[char_count + 1];	}
-					catch(const std::bad_alloc&)
-						{	throw ENoMemory;	}
-
-					for(size_t i = 0; i < char_count + 1; ++i)
-						{	bytes_to_read[i] = 0;	}
-
-#ifdef ALL_CONSOLE_OUTPUT
-					std::wcout << std::endl << "Sending bytes...";
-#endif
-					if(!WriteFile(hSerial, bytes_to_send, bytes_to_send_str.length(), &bytes_written, NULL))
+					for (;;)
 						{
-						std::wcerr << "\aWriteFile failed with error " << GetLastError() << std::endl;
-						port_dissapeared = true;
-						break;
-						}
+						for (size_t i = 0; i < char_count + 1; ++i)
+							{	bytes_to_read[i] = 0;	}
+
 #ifdef ALL_CONSOLE_OUTPUT
-					std::wcout << bytes_written << " bytes written" << std::endl;
-
-
-					std::wcout << "Receiving bytes...";
+						std::wcout << std::endl << "Sending bytes...";
 #endif
-					if(!ReadFile(hSerial, bytes_to_read, bytes_to_send_str.length(), &bytes_read, NULL))
-						{
-						std::wcerr << "\aReadFile failed with error " << GetLastError() << std::endl;
-						port_dissapeared = true;
-						break;
-						}
+						size_t current_i = 0;
+						for (size_t i = 0; i < bytes_to_send_str.length(); ++i)
+							{
+							if (!WriteFile(hSerial, &bytes_to_send[i], 1, &bytes_written, NULL))
+								{
+								std::wcerr << "\aWriteFile failed with error " << GetLastError() << std::endl;
+								port_dissapeared = true;
+								break;
+								}
 #ifdef ALL_CONSOLE_OUTPUT
-					std::wcout << bytes_read << " bytes read\n\n";
+							std::wcout << bytes_written << " bytes written" << std::endl;
 #endif
 
-					if(!bytes_written)
-						std::wcerr << "0 bytes have been sent!" << std::endl;
-					if(bytes_read != bytes_written)
-						{
-						std::wcerr << "Communication interrupted!" << std::endl;
-						std::wcerr << "\t" << bytes_written << " bytes written" << std::endl;
-						std::wcerr << "\t" << bytes_read << " bytes read" << std::endl;
-						}
-					if(strcmp(bytes_to_send, bytes_to_read))
-						std::wcerr << "Bad received message!\n" << std::endl;
+#ifdef ALL_CONSOLE_OUTPUT
+							std::wcout << "Receiving bytes...";
+#endif
+							if (!ReadFile(hSerial, &bytes_to_read[i], 1, &bytes_read, NULL))
+								{
+								std::wcerr << "\aReadFile failed with error " << GetLastError() << std::endl;
+								port_dissapeared = true;
+								break;
+								}
+#ifdef ALL_CONSOLE_OUTPUT
+							std::wcout << bytes_read << " bytes read\n\n";
+#endif
+							total_bytes_written += bytes_written;
+							total_bytes_read += bytes_read;
+
+							if (!bytes_written)
+								std::wcerr << "0 bytes have been sent!" << std::endl;
+							if (bytes_read != bytes_written)
+								std::wcerr << "Communication interrupted!" << std::endl;
+							if (bytes_to_send[i] != bytes_to_read[i])
+								std::wcerr << "Bad received " << i << "th character!" << std::endl;
 
 #ifdef ALL_CONSOLE_OUTPUT
-					std::wcout << "Received message:\n\n" << bytes_to_read << "\n" << std::endl;
+							std::wcout << "Received message:\n\n" << bytes_to_read << "\n" << std::endl;
 #endif
 #ifdef LOG_RECEIVED_MESSAGE
-					flog << repeat_counter + 1 << ".: " << bytes_to_read << std::endl;
+							flog << repeat_counter + 1 << ".: " << bytes_to_read << std::endl;
+#endif
+							current_i = i;
+							if (_kbhit() && _getch() == 27)
+								{	end_inf_cycle = true; break;	}
+							}
+
+						if (!total_bytes_written)
+							std::wcerr << "0 total bytes have been sent!" << std::endl;
+						if (strncmp(bytes_to_send, bytes_to_read, current_i+1))
+							std::wcerr << "Bad received string!\n" << std::endl;
+
+						++cycle_counter;
+#ifdef LOG_RECEIVED_MESSAGE
+						flog << repeat_counter << ".: " << bytes_to_read << std::endl;
 #endif
 
-					++repeat_counter;
-					delete[] bytes_to_read;
+						if (port_dissapeared || end_inf_cycle)
+							break;
+						}
+
+					std::wcerr << "\ttotal " << total_bytes_written << " bytes written" << std::endl;
+					std::wcerr << "\ttotal " << total_bytes_read << " bytes read" << std::endl;
+					std::wcerr << "\tString length was: " << bytes_to_send_str.length() << "\n" << std::endl;
+					}
+				else
+					{
+					while (repeat_counter < repetitions)
+						{
+						for (size_t i = 0; i < char_count + 1; ++i)
+							{	bytes_to_read[i] = 0;	}
+
+#ifdef ALL_CONSOLE_OUTPUT
+						std::wcout << std::endl << "Sending bytes...";
+#endif
+						size_t current_i = 0;
+						for (size_t i = 0; i < bytes_to_send_str.length(); ++i)
+							{
+							if (!WriteFile(hSerial, &bytes_to_send[i], 1, &bytes_written, NULL))
+								{
+								std::wcerr << "\aWriteFile failed with error " << GetLastError() << std::endl;
+								port_dissapeared = true;
+								break;
+								}
+#ifdef ALL_CONSOLE_OUTPUT
+							std::wcout << bytes_written << " bytes written" << std::endl;
+#endif
+
+#ifdef ALL_CONSOLE_OUTPUT
+							std::wcout << "Receiving bytes...";
+#endif
+							if (!ReadFile(hSerial, &bytes_to_read[i], 1, &bytes_read, NULL))
+								{
+								std::wcerr << "\aReadFile failed with error " << GetLastError() << std::endl;
+								port_dissapeared = true;
+								break;
+								}
+#ifdef ALL_CONSOLE_OUTPUT
+							std::wcout << bytes_read << " bytes read\n\n";
+#endif
+							total_bytes_written += bytes_written;
+							total_bytes_read += bytes_read;
+
+							if (!bytes_written)
+								std::wcerr << "0 bytes have been sent!" << std::endl;
+							if (bytes_read != bytes_written)
+								std::wcerr << "Communication interrupted!" << std::endl;
+							if (bytes_to_send[i] != bytes_to_read[i])
+								std::wcerr << "Bad received " << i << "th character!" << std::endl;
+
+#ifdef ALL_CONSOLE_OUTPUT
+							std::wcout << "Received message:\n\n" << bytes_to_read << "\n" << std::endl;
+#endif
+							current_i = i;
+							if (_kbhit() && _getch() == 27)
+								{	end_inf_cycle = true; break;	}
+							}
+
+						if (!total_bytes_written)
+							std::wcerr << "0 total bytes have been sent!" << std::endl;
+						if (strncmp(bytes_to_send, bytes_to_read, current_i + 1))
+							std::wcerr << "Bad received string!\n" << std::endl;
+
+						++repeat_counter;
+
+#ifdef LOG_RECEIVED_MESSAGE
+						flog << repeat_counter << ".: " << bytes_to_read << std::endl;
+#endif
+
+						if (port_dissapeared || end_inf_cycle)
+							break;
+						}
+
+					std::wcerr << "\ttotal " << total_bytes_written << " bytes written" << std::endl;
+					std::wcerr << "\ttotal " << total_bytes_read << " bytes read" << std::endl;
+					std::wcerr << "\tString length was: " << bytes_to_send_str.length() << "\n" << std::endl;
 					}
 
 				if(port_dissapeared)
@@ -253,6 +353,7 @@ int _tmain(int argc, TCHAR *argv[])
 						{	std::cout << std::endl << "Send another string? (yes/no)" << std::endl;	std::getline(std::cin, send_again);	}
 					}
 
+				delete[] bytes_to_read;
 #ifdef LOG_RECEIVED_MESSAGE
 				flog.close();
 #endif

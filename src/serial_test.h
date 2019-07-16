@@ -7,6 +7,7 @@
 #include <tchar.h>
 #include <conio.h>
 #include <assert.h>
+#include <process.h>
 
 #ifdef __cplusplus
 
@@ -16,6 +17,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <chrono>
 
 #else
 
@@ -25,6 +27,10 @@
 #endif
 //#define ALL_CONSOLE_OUTPUT
 //#define LOG_RECEIVED_MESSAGE
+#define WRITE_TIMEOUT INFINITE
+#define READ_TIMEOUT INFINITE
+#define DETECTION_TIMEOUT (long long)50
+#define QUERECONNECT (DWORD)0
 
 enum TError {
 	ENoMemory = 0,
